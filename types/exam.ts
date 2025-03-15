@@ -60,6 +60,20 @@ export interface RiskScoreHistory {
   windowScore: number;
 }
 
+export interface ActivityBreakdown {
+  data: Array<{
+    type: string;
+    count: number;
+  }>;
+  trends: {
+    mouseEvents: number;
+    keyboardEvents: number;
+    windowEvents: number;
+    otherEvents: number;
+    overall: number;
+  };
+}
+
 export interface StudentExamData {
   id: string;
   candidateInfo: CandidateInfo;
@@ -70,15 +84,36 @@ export interface StudentExamData {
   windowScore: number;
   recentActivities: ActivityEvent[];
   timeSeriesData: TimeSeriesDataPoint[];
-  activityStats: ActivityStats;
-  riskScoreHistory: RiskScoreHistory[];
-  activityBreakdown: {
+  activityStats: {
+    totalEvents: number;
     mouseEvents: number;
     keyboardEvents: number;
     windowEvents: number;
-    otherEvents: number;
+    suspiciousEventCount: number;
+    averageRiskScore: number;
+    windowSwitchFrequency: number;
+    keystrokeFrequency: number;
+    mouseMovementFrequency: number;
+    suspiciousEventFrequency: number;
+    focusPercentage: number;
   };
-  deviceInfo: DeviceInfo;
+  riskScoreHistory: {
+    timestamp: string;
+    score: number;
+    level: string;
+    mouseScore: number;
+    keyboardScore: number;
+    windowScore: number;
+  }[];
+  activityBreakdown: ActivityBreakdown;
+  deviceInfo: {
+    screenWidth: number | null;
+    screenHeight: number | null;
+    windowWidth: number | null;
+    windowHeight: number | null;
+    deviceType: string | null;
+    userAgent: string | null;
+  };
   screenSizeHistory: {
     timestamp: string;
     windowWidth: number;
@@ -106,6 +141,18 @@ export interface ExamDetailsData {
 
 export interface DashboardStats {
   activeExams: number;
-  suspiciousEvents: number;
-  totalCandidates: number;
+  examTrend: number;
+  activeCandidates: number;
+  candidateTrend: number;
+  averageRiskScore: number;
+  riskTrend: number;
+  highRiskStudents: number;
+  highRiskTrend: number;
+  highRiskExams: number;
+}
+
+export interface ExamStats {
+  activeStudents: number;
+  totalStudents: number;
+  averageRiskScore: number;
 }

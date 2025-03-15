@@ -4,27 +4,63 @@ import type { ActivityEvent, TimeSeriesDataPoint, StudentExamData, ExamDetailsDa
 
 export async function GET(
   request: Request,
-  context: { params: Promise<{ examId: string }> }
+  { params }: { params: Promise<{ examId: string }> }
 ) {
-  const { examId } = await context.params;
+  const { examId } = await params;
 
   if (!examId) {
     return new NextResponse("Missing examId", { status: 400 });
   }
 
   try {
+    console.log(`Fetching data for exam ${examId}...`);
     const supabase = await createSupabaseServer();
     
-    // Get all logs for this exam
-    const { data: logs } = await supabase
-      .from('proctoring_logs')
+    // First get the exam details
+    const { data: examDetails, error: examError } = await supabase
+      .from('tests')
       .select('*')
-      .eq('exam_id', examId)
-      .order('created_at', { ascending: false });
+      .eq('id', examId)
+      .single();
 
-    if (!logs || logs.length === 0) {
+    if (examError) {
+      console.error('Error fetching exam details:', examError);
+      return new NextResponse("Error fetching exam details", { status: 500 });
+    }
+
+    if (!examDetails) {
       return new NextResponse("Exam not found", { status: 404 });
     }
+
+    console.log('Fetching logs for exam...');
+    // Get all logs for this exam
+    const { data: logs, error: logsError } = await supabase
+      .from('proctoring_logs')
+      .select('*')
+      .eq('test_id', examId)
+      .order('created_at', { ascending: false });
+
+    if (logsError) {
+      console.error('Error fetching logs:', logsError);
+      return new NextResponse("Error fetching logs", { status: 500 });
+    }
+
+    if (!logs || logs.length === 0) {
+      console.log('No logs found for exam');
+      return NextResponse.json({
+        exam: {
+          ...examDetails,
+          totalStudents: 0,
+          activeStudents: 0,
+          averageRiskScore: 0,
+          riskLevel: 'low',
+          students: []
+        },
+        studentData: []
+      });
+    }
+
+    console.log(`Found ${logs.length} logs for exam`);
 
     // Group logs by user_id
     const userLogs = new Map<string, typeof logs>();
@@ -40,6 +76,7 @@ export async function GET(
     const studentData: StudentExamData[] = [];
     const students: CandidateInfo[] = [];
 
+    console.log(`Processing data for ${userLogs.size} students...`);
     for (const [userId, userLogArray] of userLogs.entries()) {
       // Sort logs chronologically
       const chronologicalLogs = [...userLogArray].sort((a, b) => 
@@ -120,17 +157,18 @@ export async function GET(
       });
 
       // Calculate activity stats
-      const totalTimeInMinutes = (new Date(latestTime).getTime() - new Date(earliestTime).getTime()) / (1000 * 60);
+      const totalTimeInMinutes = Math.max(1, (latestTime - earliestTime) / (1000 * 60));
       const focusedLogs = chronologicalLogs.filter(log => 
         log.type === 'window_state_change' && log.data?.state === 'focused'
       );
-      const totalFocusTimeInMinutes = focusedLogs.length; // Each focus log represents roughly a minute of focus time
+      const totalFocusTimeInMinutes = focusedLogs.length;
       
       const activityStats = {
         totalEvents: chronologicalLogs.length,
         mouseEvents: chronologicalLogs.filter(log => log.type === 'mouse_move').length,
         keyboardEvents: chronologicalLogs.filter(log => log.type === 'key_press').length,
         windowEvents: chronologicalLogs.filter(log => log.type === 'window_state_change').length,
+        otherEvents: chronologicalLogs.filter(log => log.type === 'tab_switch').length,
         suspiciousEventCount: chronologicalLogs.filter(log => 
           log.type === 'window_state_change' && log.data?.state === 'blurred'
         ).length,
@@ -140,6 +178,7 @@ export async function GET(
         windowSwitchFrequency: chronologicalLogs.filter(log => log.type === 'window_state_change').length / totalTimeInMinutes,
         keystrokeFrequency: chronologicalLogs.filter(log => log.type === 'key_press').length / totalTimeInMinutes,
         mouseMovementFrequency: chronologicalLogs.filter(log => log.type === 'mouse_move').length / totalTimeInMinutes,
+        tabSwitchFrequency: chronologicalLogs.filter(log => log.type === 'tab_switch').length / totalTimeInMinutes,
         suspiciousEventFrequency: chronologicalLogs.filter(log => 
           log.type === 'window_state_change' && log.data?.state === 'blurred'
         ).length / totalTimeInMinutes,
@@ -153,19 +192,43 @@ export async function GET(
       const calculateEventCount = (logs: typeof chronologicalLogs, type: string) => 
         logs.filter(log => log.type === type).length;
 
+      const calculateTrend = (recent: number, previous: number) => {
+        if (previous === 0) return 0;
+        return ((recent - previous) / previous) * 100;
+      };
+
+      // Transform the data into the format expected by the chart
+      const activityTypes = [
+        { type: 'mouse', eventType: 'mouse_move', label: 'Mouse Movement' },
+        { type: 'keyboard', eventType: 'key_press', label: 'Keyboard Activity' },
+        { type: 'window', eventType: 'window_state_change', label: 'Window Changes' },
+        { type: 'other', eventType: 'tab_switch', label: 'Tab Switches' }
+      ];
+
       const activityBreakdown = {
-        data: {
-          mouseEvents: calculateEventCount(recentLogs, 'mouse_move'),
-          keyboardEvents: calculateEventCount(recentLogs, 'key_press'),
-          windowEvents: calculateEventCount(recentLogs, 'window_state_change'),
-          otherEvents: calculateEventCount(recentLogs, 'tab_switch')
-        },
+        data: activityTypes.map(({ type, eventType, label }) => ({
+          type,
+          label,
+          count: calculateEventCount(recentLogs, eventType)
+        })),
         trends: {
-          mouseEvents: ((calculateEventCount(recentLogs, 'mouse_move') - calculateEventCount(previousLogs, 'mouse_move')) / calculateEventCount(previousLogs, 'mouse_move')) * 100,
-          keyboardEvents: ((calculateEventCount(recentLogs, 'key_press') - calculateEventCount(previousLogs, 'key_press')) / calculateEventCount(previousLogs, 'key_press')) * 100,
-          windowEvents: ((calculateEventCount(recentLogs, 'window_state_change') - calculateEventCount(previousLogs, 'window_state_change')) / calculateEventCount(previousLogs, 'window_state_change')) * 100,
-          otherEvents: ((calculateEventCount(recentLogs, 'tab_switch') - calculateEventCount(previousLogs, 'tab_switch')) / calculateEventCount(previousLogs, 'tab_switch')) * 100,
-          overall: ((recentLogs.length - previousLogs.length) / previousLogs.length) * 100
+          mouseEvents: calculateTrend(
+            calculateEventCount(recentLogs, 'mouse_move'),
+            calculateEventCount(previousLogs, 'mouse_move')
+          ),
+          keyboardEvents: calculateTrend(
+            calculateEventCount(recentLogs, 'key_press'),
+            calculateEventCount(previousLogs, 'key_press')
+          ),
+          windowEvents: calculateTrend(
+            calculateEventCount(recentLogs, 'window_state_change'),
+            calculateEventCount(previousLogs, 'window_state_change')
+          ),
+          otherEvents: calculateTrend(
+            calculateEventCount(recentLogs, 'tab_switch'),
+            calculateEventCount(previousLogs, 'tab_switch')
+          ),
+          overall: calculateTrend(recentLogs.length, previousLogs.length)
         }
       };
 
@@ -217,7 +280,7 @@ export async function GET(
         name: "Student " + userId.slice(0, 4),
         email: `student${userId.slice(0, 4)}@example.com`,
         examStartTime: chronologicalLogs[0].created_at,
-        deviceInfo: `Screen: ${chronologicalLogs[0].screen_width}x${chronologicalLogs[0].screen_height}, Window: ${chronologicalLogs[0].window_width}x${chronologicalLogs[0].window_height}, Type: ${chronologicalLogs[0].device_type || 'Unknown'}`,
+        deviceInfo: `Screen: ${deviceInfo.screenWidth}x${deviceInfo.screenHeight}, Window: ${deviceInfo.windowWidth}x${deviceInfo.windowHeight}, Type: ${deviceInfo.deviceType}`,
         userId: userId,
         riskScore,
         riskLevel,
@@ -240,7 +303,7 @@ export async function GET(
         timeSeriesData: Array.from(timeSeriesMap.values()),
         activityStats,
         riskScoreHistory,
-        activityBreakdown: activityBreakdown.data,
+        activityBreakdown,
         deviceInfo,
         screenSizeHistory
       });
@@ -249,20 +312,15 @@ export async function GET(
     // Calculate exam-wide statistics
     const totalStudents = students.length;
     const activeStudents = students.length;
-    const averageRiskScore = students.reduce((acc, student) => acc + student.riskScore, 0) / totalStudents;
+    const averageRiskScore = students.reduce((acc, student) => acc + student.riskScore, 0) / totalStudents || 0;
 
-    // Get the latest exam-wide risk level
-    const latestLogWithScore = [...logs]
-      .find(log => log.risk_score !== null);
-    const examRiskLevel = latestLogWithScore?.risk_level ?? 'low';
+    // Get the latest exam-wide risk level (based on highest student risk)
+    const examRiskLevel = students.some(s => s.riskLevel === 'high') ? 'high' :
+                         students.some(s => s.riskLevel === 'medium') ? 'medium' : 'low';
 
-    const examDetails: ExamDetailsData = {
+    const examDetailsData: ExamDetailsData = {
       exam: {
-        id: examId,
-        title: "Programming Fundamentals Exam",
-        description: "Final examination for the Programming Fundamentals course",
-        startTime: logs[logs.length - 1].created_at,
-        endTime: logs[0].created_at,
+        ...examDetails,
         totalStudents,
         activeStudents,
         averageRiskScore,
@@ -278,7 +336,8 @@ export async function GET(
     headers.set('Pragma', 'no-cache');
     headers.set('Expires', '0');
 
-    return NextResponse.json(examDetails, { headers });
+    console.log('Successfully processed exam data');
+    return NextResponse.json(examDetailsData, { headers });
   } catch (error) {
     console.error("[EXAM_ERROR]", error);
     return new NextResponse("Internal Error", { status: 500 });

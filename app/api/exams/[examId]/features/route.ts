@@ -28,7 +28,7 @@ export async function POST(
     const { data: logs, error } = await supabase
       .from('proctoring_logs')
       .select('*')
-      .eq('exam_id', examId)
+      .eq('test_id', examId)
       .gte('created_at', windowStart.toISOString())
       .lte('created_at', currentTime.toISOString())
       .order('created_at', { ascending: true });
@@ -52,34 +52,46 @@ export async function POST(
         new Date(log.created_at) < intervalEnd
       );
 
-      // Calculate metrics for this interval
-      const mouseEvents = intervalLogs.filter(log => log.type === 'mouse_activity');
-      const keyboardEvents = intervalLogs.filter(log => log.type === 'keyboard_activity');
+      // Calculate metrics for this interval using correct event types
+      const mouseEvents = intervalLogs.filter(log => log.type === 'mouse_move');
+      const keyboardEvents = intervalLogs.filter(log => log.type === 'key_press');
       const windowEvents = intervalLogs.filter(log => log.type === 'window_state_change');
+      const tabSwitchEvents = intervalLogs.filter(log => log.type === 'tab_switch');
 
       // Calculate normalized mouse coordinates
-      const mouseCoords = mouseEvents.map(event => event.data?.coordinates || { x: 0, y: 0 });
+      const mouseCoords = mouseEvents.map(event => ({
+        x: event.data?.x || 0,
+        y: event.data?.y || 0
+      }));
       const normX = mouseCoords.map(coord => coord.x);
       const normY = mouseCoords.map(coord => coord.y);
 
       features.push({
         interval_start: intervalStart.toISOString(),
         interval_end: intervalEnd.toISOString(),
+        // Mouse movement features
+        mouse_movement_count: mouseEvents.length,
         avg_norm_x: normX.length ? normX.reduce((a, b) => a + b, 0) / normX.length : 0,
         avg_norm_y: normY.length ? normY.reduce((a, b) => a + b, 0) / normY.length : 0,
         std_norm_x: calculateStdDev(normX),
         std_norm_y: calculateStdDev(normY),
-        idle_percentage: calculateIdlePercentage(intervalLogs, body.interval_seconds),
+        // Keyboard features
+        key_press_count: keyboardEvents.length,
         key_press_rate: keyboardEvents.length / (body.interval_seconds / 60), // per minute
         shortcut_key_ratio: calculateShortcutRatio(keyboardEvents),
         backspace_ratio: calculateBackspaceRatio(keyboardEvents),
         rapid_key_ratio: calculateRapidKeyRatio(keyboardEvents),
-        clipboard_operation_rate: calculateClipboardRate(intervalLogs),
+        // Window and tab features
+        window_event_count: windowEvents.length,
+        tab_switch_count: tabSwitchEvents.length,
         blur_count: windowEvents.filter(e => e.data?.state === 'blurred').length,
-        tab_switch_count: windowEvents.filter(e => e.data?.type === 'tab_switch').length,
+        focus_count: windowEvents.filter(e => e.data?.state === 'focused').length,
         total_blur_duration: calculateBlurDuration(windowEvents),
         rapid_switch_count: calculateRapidSwitches(windowEvents),
-        suspicious_resize_count: calculateSuspiciousResizes(windowEvents)
+        suspicious_resize_count: calculateSuspiciousResizes(windowEvents),
+        // Activity metrics
+        total_events: intervalLogs.length,
+        idle_percentage: calculateIdlePercentage(intervalLogs, body.interval_seconds)
       });
 
       intervalStart = intervalEnd;
@@ -107,19 +119,22 @@ function calculateStdDev(values: number[]): number {
 
 function calculateIdlePercentage(logs: any[], intervalSeconds: number): number {
   const activeEvents = logs.filter(log => 
-    log.type === 'mouse_activity' || 
-    log.type === 'keyboard_activity'
+    log.type === 'mouse_move' || 
+    log.type === 'key_press'
   ).length;
   return Math.max(0, 100 - (activeEvents / intervalSeconds * 100));
 }
 
 function calculateShortcutRatio(keyboardEvents: any[]): number {
-  const shortcutEvents = keyboardEvents.filter(e => e.data?.isShortcut).length;
+  const shortcutEvents = keyboardEvents.filter(e => 
+    e.data?.key_type === 'shortcut' || 
+    (e.data?.ctrl || e.data?.alt || e.data?.meta)
+  ).length;
   return keyboardEvents.length ? shortcutEvents / keyboardEvents.length : 0;
 }
 
 function calculateBackspaceRatio(keyboardEvents: any[]): number {
-  const backspaceEvents = keyboardEvents.filter(e => e.data?.key === 'Backspace').length;
+  const backspaceEvents = keyboardEvents.filter(e => e.data?.key_type === 'Backspace').length;
   return keyboardEvents.length ? backspaceEvents / keyboardEvents.length : 0;
 }
 
@@ -134,12 +149,6 @@ function calculateRapidKeyRatio(keyboardEvents: any[]): number {
     }
   }
   return rapidCount / keyboardEvents.length;
-}
-
-function calculateClipboardRate(logs: any[]): number {
-  return logs.filter(log => 
-    log.type === 'clipboard_operation'
-  ).length;
 }
 
 function calculateBlurDuration(windowEvents: any[]): number {

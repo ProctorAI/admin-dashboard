@@ -23,25 +23,25 @@ export const api = {
   },
 
   // get detailed exam data including all students
-  getExamDetails: async (examId: string): Promise<ExamDetailsData> => {
-    const { data } = await apiClient.get<ExamDetailsData>(`/exams/${examId}`);
+  getExamDetails: async (testId: string): Promise<ExamDetailsData> => {
+    const { data } = await apiClient.get<ExamDetailsData>(`/exams/${testId}`);
     return data;
   },
 
   // get specific student data for an exam
-  getStudentExamData: async (examId: string, userId: string): Promise<StudentExamData> => {
-    const { data } = await apiClient.get<StudentExamData>(`/exams/${examId}/students/${userId}`);
+  getStudentExamData: async (testId: string, userId: string): Promise<StudentExamData> => {
+    const { data } = await apiClient.get<StudentExamData>(`/exams/${testId}/students/${userId}`);
     return data;
   },
 
-  getExamFeatures: async (examId: string, intervalSeconds: number, windowSizeSeconds: number) => {
+  getExamFeatures: async (testId: string, intervalSeconds: number, windowSizeSeconds: number) => {
     const response = await fetch(`${API_BASE_URL}/features/extract`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        exam_id: examId,
+          test_id: testId,
         interval_seconds: intervalSeconds,
         window_size_seconds: windowSizeSeconds
       }),
@@ -51,7 +51,7 @@ export const api = {
       if (response.status === 404) {
         // Return empty features array for 404
         return {
-          exam_id: examId,
+          exam_id: testId,
           intervals_processed: 0,
           features: []
         };

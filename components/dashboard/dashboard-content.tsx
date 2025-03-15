@@ -5,7 +5,7 @@ import { api } from '@/lib/api-client';
 import { StatsCard } from './stats-card';
 import { ExamsList } from './exams-list';
 import { Button } from '@/components/ui/button';
-import { Users, AlertTriangle, BookOpen, Activity } from 'lucide-react';
+import { Users, AlertTriangle, BookOpen, Activity, Gauge } from 'lucide-react';
 
 export function DashboardContent() {
   const { data: stats, isLoading } = useQuery({
@@ -23,7 +23,7 @@ export function DashboardContent() {
         </div>
         <Button size="sm" className="gap-2" variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <span>High Risk Exams</span>
+          <span>High Risk Exams ({stats?.highRiskExams || 0})</span>
         </Button>
       </div>
 
@@ -32,29 +32,33 @@ export function DashboardContent() {
           label="Active Exams" 
           value={stats?.activeExams || 0}
           unit="exams"
+          trend={stats?.examTrend}
           variant="blue"
           icon={BookOpen}
         />
         <StatsCard 
-          label="Total Suspicious Events" 
-          value={stats?.suspiciousEvents || 0}
-          unit="alerts"
+          label="Average Risk Score" 
+          value={Number((stats?.averageRiskScore || 0).toFixed(1))}
+          unit="risk level"
+          trend={stats?.riskTrend}
           variant="red"
-          icon={AlertTriangle}
+          icon={Gauge}
         />
         <StatsCard 
           label="Active Candidates" 
-          value={stats?.totalCandidates || 0}
+          value={stats?.activeCandidates || 0}
           unit="users"
+          trend={stats?.candidateTrend}
           variant="green"
           icon={Users}
         />
         <StatsCard 
-          label="System Status" 
-          value={100}
-          unit="%"
+          label="High Risk Students" 
+          value={stats?.highRiskStudents || 0}
+          unit="alerts"
+          trend={stats?.highRiskTrend}
           variant="purple"
-          icon={Activity}
+          icon={AlertTriangle}
         />
       </div>
 

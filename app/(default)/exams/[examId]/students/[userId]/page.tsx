@@ -106,10 +106,11 @@ export default function StudentExamPage({ params: paramsPromise }: StudentExamPa
 
           <div className="grid gap-6 md:grid-cols-2">
             <ActivityChart timeSeriesData={studentData.timeSeriesData} />
-            <ActivityBreakdownChart data={studentData.activityBreakdown} />
+            <ActivityBreakdownChart 
+              data={studentData.activityBreakdown.data} 
+              trends={studentData.activityBreakdown.trends} 
+            />
           </div>
-
-
 
           <div className="grid gap-6 md:grid-cols-2">
             <WindowSizeChart 

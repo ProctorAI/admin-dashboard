@@ -1,44 +1,53 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServer } from '@/lib/supabase/server';
-import type { ActivityEvent, TimeSeriesDataPoint, StudentExamData, ActivityStats, DeviceInfo } from '@/types/exam';
+import type { ActivityEvent, TimeSeriesDataPoint, StudentExamData } from '@/types/exam';
 
 export async function GET(
   request: Request,
-  context: { params: Promise<{ examId: string; userId: string }> }
+  { params }: { params: Promise<{ examId: string; userId: string }> }
 ) {
   try {
-    const { examId, userId } = await context.params;
+    const { examId, userId } = await params;
 
     if (!examId || !userId) {
       return new NextResponse("Missing examId or userId", { status: 400 });
     }
 
+    console.log(`Fetching data for student ${userId} in exam ${examId}...`);
     const supabase = await createSupabaseServer();
     
-    // Get logs for specific student in this exam with all columns
-    const { data: logs } = await supabase
+    // Get logs for specific student in this exam
+    const { data: logs, error: logsError } = await supabase
       .from('proctoring_logs')
       .select('*')
-      .eq('exam_id', examId)
+      .eq('test_id', examId)
       .eq('user_id', userId)
       .order('created_at', { ascending: true });
+
+    if (logsError) {
+      console.error('Error fetching logs:', logsError);
+      return new NextResponse("Error fetching logs", { status: 500 });
+    }
 
     if (!logs || logs.length === 0) {
       return new NextResponse("Student exam data not found", { status: 404 });
     }
 
-    // Get initial device info
-    const deviceInfo: DeviceInfo = {
-      deviceType: logs[0].device_type,
+    console.log(`Found ${logs.length} logs for student`);
+
+    // Extract device info
+    const deviceInfo = {
+      deviceType: logs[0].device_type || 'Unknown',
       screenWidth: logs[0].screen_width,
       screenHeight: logs[0].screen_height,
       windowWidth: logs[0].window_width,
       windowHeight: logs[0].window_height,
+      userAgent: logs[0].user_agent || 'Unknown'
     };
 
     // Track window size changes over time
     const screenSizeHistory = logs
-      .filter(log => log.window_width !== null && log.window_height !== null)
+      .filter(log => log.window_width && log.window_height)
       .map(log => ({
         timestamp: log.created_at,
         windowWidth: log.window_width!,
@@ -52,17 +61,6 @@ export async function GET(
       type: log.type,
       data: log.data
     }));
-
-    // Process risk score history with all scores
-    const riskScoreHistory = logs
-      .filter(log => log.risk_score !== null)
-      .map(log => ({
-        timestamp: log.created_at,
-        score: log.risk_score ?? 0,
-        mouseScore: log.mouse_score ?? 0,
-        keyboardScore: log.keyboard_score ?? 0,
-        windowScore: log.window_score ?? 0
-      }));
 
     // Process time series data
     const timeSeriesMap = new Map<string, TimeSeriesDataPoint>();
@@ -84,45 +82,17 @@ export async function GET(
         timestamp: currentTime.toISOString(),
         totalActivity: 0,
         suspiciousEvents: 0,
-        riskScore: 0,
-        mouseScore: 0,
-        keyboardScore: 0,
-        windowScore: 0,
+        riskScore: null,
+        mouseScore: null,
+        keyboardScore: null,
+        windowScore: null,
         mouseMovements: 0,
         keystrokes: 0,
         windowSwitches: 0,
         focusTime: 0
       });
-      currentTime = new Date(currentTime.getTime() + 60000); 
+      currentTime = new Date(currentTime.getTime() + 60000);
     }
-    
-    // Calculate activity stats
-    const totalDurationMinutes = (latestTime - earliestTime) / (1000 * 60);
-    
-    const activityStats: ActivityStats = {
-      totalEvents: logs.length,
-      suspiciousEventCount: logs.filter(log => 
-        log.type === 'window_state_change' && log.data?.state === 'blurred'
-      ).length,
-      averageRiskScore: logs.reduce((sum, log) => sum + (log.risk_score || 0), 0) / 
-        logs.filter(log => log.risk_score !== null).length || 0,
-      windowSwitchFrequency: logs.filter(log => log.type === 'window_state_change').length / totalDurationMinutes,
-      keystrokeFrequency: logs.filter(log => log.type === 'keyboard_activity').length / totalDurationMinutes,
-      mouseMovementFrequency: logs.filter(log => log.type === 'mouse_activity').length / totalDurationMinutes,
-      focusPercentage: (logs.filter(log => 
-        log.type === 'window_state_change' && log.data?.state === 'focused'
-      ).length / logs.length) * 100
-    };
-
-    // Calculate activity breakdown
-    const activityBreakdown = {
-      mouseEvents: logs.filter(log => log.type === 'mouse_activity').length,
-      keyboardEvents: logs.filter(log => log.type === 'keyboard_activity').length,
-      windowEvents: logs.filter(log => log.type === 'window_state_change').length,
-      otherEvents: logs.filter(log => 
-        !['mouse_activity', 'keyboard_activity', 'window_state_change'].includes(log.type)
-      ).length
-    };
 
     // Fill in activity data and risk scores
     logs.forEach(log => {
@@ -132,7 +102,22 @@ export async function GET(
       
       if (point) {
         point.totalActivity++;
-        // Update all scores, defaulting to previous values if null
+        
+        switch (log.type) {
+          case 'mouse_move':
+            point.mouseMovements++;
+            break;
+          case 'key_press':
+            point.keystrokes++;
+            break;
+          case 'window_state_change':
+            point.windowSwitches++;
+            if (log.data?.state === 'blurred') {
+              point.suspiciousEvents++;
+            }
+            break;
+        }
+
         if (log.risk_score !== null) {
           point.riskScore = log.risk_score;
           point.mouseScore = log.mouse_score ?? point.mouseScore;
@@ -142,9 +127,92 @@ export async function GET(
       }
     });
 
-    // Convert time series map to sorted array
+    // Sort time series data chronologically
     const timeSeriesData = Array.from(timeSeriesMap.values())
       .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    
+    // Calculate activity stats
+    const totalTimeInMinutes = Math.max(1, (latestTime - earliestTime) / (1000 * 60));
+    
+    const activityStats = {
+      totalEvents: logs.length,
+      mouseEvents: logs.filter(log => log.type === 'mouse_move').length,
+      keyboardEvents: logs.filter(log => log.type === 'key_press').length,
+      windowEvents: logs.filter(log => log.type === 'window_state_change').length,
+      suspiciousEventCount: logs.filter(log => 
+        log.type === 'window_state_change' && log.data?.state === 'blurred'
+      ).length,
+      averageRiskScore: logs
+        .filter(log => log.risk_score !== null)
+        .reduce((acc, log) => acc + (log.risk_score || 0), 0) / logs.length || 0,
+      windowSwitchFrequency: logs.filter(log => log.type === 'window_state_change').length / totalTimeInMinutes,
+      keystrokeFrequency: logs.filter(log => log.type === 'key_press').length / totalTimeInMinutes,
+      mouseMovementFrequency: logs.filter(log => log.type === 'mouse_move').length / totalTimeInMinutes,
+      suspiciousEventFrequency: logs.filter(log => 
+        log.type === 'window_state_change' && log.data?.state === 'blurred'
+      ).length / totalTimeInMinutes,
+      focusPercentage: (logs.filter(log => 
+        log.type === 'window_state_change' && log.data?.state === 'focused'
+      ).length / totalTimeInMinutes) * 100
+    };
+
+    // Calculate activity breakdown for recent events
+    const recentLogs = logs.slice(-100);
+    const previousLogs = logs.slice(-200, -100);
+
+    const calculateEventCount = (logs: typeof recentLogs, type: string) => 
+      logs.filter(log => log.type === type).length;
+
+    const calculateTrend = (recent: number, previous: number) => {
+      if (previous === 0) return 0;
+      return ((recent - previous) / previous) * 100;
+    };
+
+    // Transform the data into the format expected by the chart
+    const activityTypes = [
+      { type: 'mouse', eventType: 'mouse_move' },
+      { type: 'keyboard', eventType: 'key_press' },
+      { type: 'window', eventType: 'window_state_change' },
+      { type: 'other', eventType: 'tab_switch' }
+    ];
+
+    const activityBreakdown = {
+      data: activityTypes.map(({ type, eventType }) => ({
+        type,
+        count: calculateEventCount(recentLogs, eventType)
+      })),
+      trends: {
+        mouseEvents: calculateTrend(
+          calculateEventCount(recentLogs, 'mouse_move'),
+          calculateEventCount(previousLogs, 'mouse_move')
+        ),
+        keyboardEvents: calculateTrend(
+          calculateEventCount(recentLogs, 'key_press'),
+          calculateEventCount(previousLogs, 'key_press')
+        ),
+        windowEvents: calculateTrend(
+          calculateEventCount(recentLogs, 'window_state_change'),
+          calculateEventCount(previousLogs, 'window_state_change')
+        ),
+        otherEvents: calculateTrend(
+          calculateEventCount(recentLogs, 'tab_switch'),
+          calculateEventCount(previousLogs, 'tab_switch')
+        ),
+        overall: calculateTrend(recentLogs.length, previousLogs.length)
+      }
+    };
+
+    // Process risk score history
+    const riskScoreHistory = logs
+      .filter(log => log.risk_score !== null)
+      .map(log => ({
+        timestamp: log.created_at,
+        score: log.risk_score || 0,
+        level: log.risk_level || 'low',
+        mouseScore: log.mouse_score || 0,
+        keyboardScore: log.keyboard_score || 0,
+        windowScore: log.window_score || 0
+      }));
 
     // Get the latest log with risk scores
     const latestLogWithScore = [...logs]
@@ -164,7 +232,7 @@ export async function GET(
         name: "Student " + userId.slice(0, 4),
         email: `student${userId.slice(0, 4)}@example.com`,
         examStartTime: logs[0].created_at,
-        deviceInfo: `Screen: ${deviceInfo.screenWidth}x${deviceInfo.screenHeight}, Window: ${deviceInfo.windowWidth}x${deviceInfo.windowHeight}, Type: ${deviceInfo.deviceType || 'Unknown'}`,
+        deviceInfo: `Screen: ${deviceInfo.screenWidth}x${deviceInfo.screenHeight}, Window: ${deviceInfo.windowWidth}x${deviceInfo.windowHeight}, Type: ${deviceInfo.deviceType}`,
         userId: userId,
         riskScore,
         riskLevel,
@@ -185,6 +253,8 @@ export async function GET(
       activityBreakdown,
       riskScoreHistory
     };
+
+    console.log('Successfully processed student data');
 
     const headers = new Headers();
     headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');

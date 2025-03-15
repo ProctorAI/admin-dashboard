@@ -9,12 +9,10 @@ import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 
 interface ActivityBreakdownProps {
-  data: {
-    mouseEvents: number;
-    keyboardEvents: number;
-    windowEvents: number;
-    otherEvents: number;
-  };
+  data: Array<{
+    type: string;
+    count: number;
+  }>;
   trends?: {
     mouseEvents: number;
     keyboardEvents: number;
@@ -30,22 +28,19 @@ interface ChartDataConfig {
 }
 
 const chartConfig = {
-  count: {
-    label: "Count",
-  } as ChartDataConfig,
-  mouseEvents: {
+  mouse: {
     label: "Mouse Events",
     color: "hsl(var(--chart-1))",
   } as ChartDataConfig,
-  keyboardEvents: {
+  keyboard: {
     label: "Keyboard Events",
     color: "hsl(var(--chart-2))",
   } as ChartDataConfig,
-  windowEvents: {
+  window: {
     label: "Window Events",
     color: "hsl(var(--chart-3))",
   } as ChartDataConfig,
-  otherEvents: {
+  other: {
     label: "Other Events",
     color: "hsl(var(--chart-4))",
   } as ChartDataConfig,
@@ -53,7 +48,7 @@ const chartConfig = {
 
 export function ActivityBreakdownChart({ data, trends }: ActivityBreakdownProps) {
   const totalEvents = useMemo(() => {
-    return Object.values(data).reduce((acc, curr) => acc + curr, 0);
+    return data.reduce((acc, curr) => acc + curr.count, 0);
   }, [data]);
 
   const overallTrend = trends?.overall ?? 0;
@@ -64,27 +59,32 @@ export function ActivityBreakdownChart({ data, trends }: ActivityBreakdownProps)
 
   // Prepare data for different views
   const allEventsData = useMemo(() => {
-    return Object.entries(data)
-      .map(([key, value]) => ({
-        type: key,
-        count: value,
-        fill: chartConfig[key as keyof typeof chartConfig]?.color ?? "hsl(var(--muted))",
+    return data
+      .map(item => ({
+        ...item,
+        fill: chartConfig[item.type as keyof typeof chartConfig]?.color ?? "hsl(var(--muted))",
       }))
       .sort((a, b) => b.count - a.count);
   }, [data]);
 
   const interactionData = useMemo(() => {
-    return [
-      { type: "mouseEvents", count: data.mouseEvents, fill: chartConfig.mouseEvents.color },
-      { type: "keyboardEvents", count: data.keyboardEvents, fill: chartConfig.keyboardEvents.color },
-    ].sort((a, b) => b.count - a.count);
+    return data
+      .filter(item => ['mouse', 'keyboard'].includes(item.type))
+      .map(item => ({
+        ...item,
+        fill: chartConfig[item.type as keyof typeof chartConfig]?.color ?? "hsl(var(--muted))",
+      }))
+      .sort((a, b) => b.count - a.count);
   }, [data]);
 
   const systemData = useMemo(() => {
-    return [
-      { type: "windowEvents", count: data.windowEvents, fill: chartConfig.windowEvents.color },
-      { type: "otherEvents", count: data.otherEvents, fill: chartConfig.otherEvents.color },
-    ].sort((a, b) => b.count - a.count);
+    return data
+      .filter(item => ['window', 'other'].includes(item.type))
+      .map(item => ({
+        ...item,
+        fill: chartConfig[item.type as keyof typeof chartConfig]?.color ?? "hsl(var(--muted))",
+      }))
+      .sort((a, b) => b.count - a.count);
   }, [data]);
 
   return (
