@@ -11,7 +11,7 @@ export async function GET() {
     const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
     console.log('Fetching active tests...');
-    // First, get all active tests with their details
+    // Get all active tests (either started in last 24 hours or not ended yet)
     const { data: activeTests, error: testsError } = await supabase
       .from('tests')
       .select(`
@@ -21,7 +21,7 @@ export async function GET() {
         start_date,
         end_date
       `)
-      .gte('start_date', last24Hours.toISOString());
+      .or(`start_date.gte.${last24Hours.toISOString()},end_date.gt.${now.toISOString()}`);
 
     if (testsError) {
       console.error('Error fetching tests:', testsError);
@@ -34,12 +34,13 @@ export async function GET() {
     }
 
     console.log('Fetching logs for tests...');
-    // Get all logs for active tests
+    // Get all logs for active tests from the last hour to ensure we only show truly active exams
+    const lastHour = new Date(now.getTime() - 60 * 60 * 1000);
     const { data: logs, error: logsError } = await supabase
       .from('proctoring_logs')
       .select('*')
       .in('test_id', activeTests.map(test => test.id))
-      .gte('created_at', last24Hours.toISOString())
+      .gte('created_at', lastHour.toISOString())
       .order('created_at', { ascending: false });
 
     if (logsError) {

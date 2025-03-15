@@ -5,25 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ExamData } from '@/types/exam';
 import { ExamCard } from './exam-card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { api } from '@/lib/api-client';
 
 export function ExamsList() {
   const { data: exams, isLoading, error } = useQuery<ExamData[]>({
     queryKey: ['exams'],
-    queryFn: async () => {
-      try {
-        console.log('Fetching exams...');
-        const response = await fetch('/api/exams');
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        console.log('Exams fetched:', data?.length);
-        return data;
-      } catch (error) {
-        console.error('Error fetching exams:', error);
-        throw error;
-      }
-    },
+    queryFn: api.getExams,
     refetchInterval: 30000, // Refetch every 30 seconds
   });
 
