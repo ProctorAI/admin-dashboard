@@ -1,6 +1,8 @@
 import axios from 'axios';
 import type { DashboardStats, ExamData, StudentExamData, ExamDetailsData } from '@/types/exam';
 
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8001';
+
 export const apiClient = axios.create({
   baseURL: '/api',
   headers: {
@@ -30,5 +32,33 @@ export const api = {
   getStudentExamData: async (examId: string, userId: string): Promise<StudentExamData> => {
     const { data } = await apiClient.get<StudentExamData>(`/exams/${examId}/students/${userId}`);
     return data;
-  }
+  },
+
+  getExamFeatures: async (examId: string, intervalSeconds: number, windowSizeSeconds: number) => {
+    const response = await fetch(`${API_BASE_URL}/features/extract`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        exam_id: examId,
+        interval_seconds: intervalSeconds,
+        window_size_seconds: windowSizeSeconds
+      }),
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        // Return empty features array for 404
+        return {
+          exam_id: examId,
+          intervals_processed: 0,
+          features: []
+        };
+      }
+      throw new Error('Failed to fetch exam features');
+    }
+
+    return response.json();
+  },
 }; 

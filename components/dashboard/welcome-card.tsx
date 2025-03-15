@@ -40,7 +40,6 @@ export function WelcomeCard({
             <Progress 
               value={progressPercentage} 
               className="h-2 bg-blue-500/30" 
-              indicatorClassName="bg-white"
             />
             <p className="text-sm text-blue-100">
               You have <span className="font-semibold text-white">{testsToComplete} tests</span> remaining today

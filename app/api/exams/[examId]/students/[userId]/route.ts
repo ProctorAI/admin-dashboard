@@ -1,14 +1,13 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServer } from '@/lib/supabase/server';
-import type { ActivityEvent, TimeSeriesDataPoint, StudentExamData } from '@/types/exam';
+import type { ActivityEvent, TimeSeriesDataPoint, StudentExamData, ActivityStats, DeviceInfo } from '@/types/exam';
 
 export async function GET(
   request: Request,
-  context: { params: { examId: string; userId: string } }
+  context: { params: Promise<{ examId: string; userId: string }> }
 ) {
   try {
-    const params = await Promise.resolve(context.params);
-    const { examId, userId } = params;
+    const { examId, userId } = await context.params;
 
     if (!examId || !userId) {
       return new NextResponse("Missing examId or userId", { status: 400 });
@@ -16,7 +15,7 @@ export async function GET(
 
     const supabase = await createSupabaseServer();
     
-    // Get logs for specific student in this exam
+    // Get logs for specific student in this exam with all columns
     const { data: logs } = await supabase
       .from('proctoring_logs')
       .select('*')
@@ -28,6 +27,24 @@ export async function GET(
       return new NextResponse("Student exam data not found", { status: 404 });
     }
 
+    // Get initial device info
+    const deviceInfo: DeviceInfo = {
+      deviceType: logs[0].device_type,
+      screenWidth: logs[0].screen_width,
+      screenHeight: logs[0].screen_height,
+      windowWidth: logs[0].window_width,
+      windowHeight: logs[0].window_height,
+    };
+
+    // Track window size changes over time
+    const screenSizeHistory = logs
+      .filter(log => log.window_width !== null && log.window_height !== null)
+      .map(log => ({
+        timestamp: log.created_at,
+        windowWidth: log.window_width!,
+        windowHeight: log.window_height!
+      }));
+
     // Process activities
     const recentActivities: ActivityEvent[] = logs.map(log => ({
       id: log.id,
@@ -35,6 +52,17 @@ export async function GET(
       type: log.type,
       data: log.data
     }));
+
+    // Process risk score history with all scores
+    const riskScoreHistory = logs
+      .filter(log => log.risk_score !== null)
+      .map(log => ({
+        timestamp: log.created_at,
+        score: log.risk_score ?? 0,
+        mouseScore: log.mouse_score ?? 0,
+        keyboardScore: log.keyboard_score ?? 0,
+        windowScore: log.window_score ?? 0
+      }));
 
     // Process time series data
     const timeSeriesMap = new Map<string, TimeSeriesDataPoint>();
@@ -56,14 +84,46 @@ export async function GET(
         timestamp: currentTime.toISOString(),
         totalActivity: 0,
         suspiciousEvents: 0,
-        riskScore: null,
-        mouseScore: null,
-        keyboardScore: null,
-        windowScore: null
+        riskScore: 0,
+        mouseScore: 0,
+        keyboardScore: 0,
+        windowScore: 0,
+        mouseMovements: 0,
+        keystrokes: 0,
+        windowSwitches: 0,
+        focusTime: 0
       });
       currentTime = new Date(currentTime.getTime() + 60000); 
     }
     
+    // Calculate activity stats
+    const totalDurationMinutes = (latestTime - earliestTime) / (1000 * 60);
+    
+    const activityStats: ActivityStats = {
+      totalEvents: logs.length,
+      suspiciousEventCount: logs.filter(log => 
+        log.type === 'window_state_change' && log.data?.state === 'blurred'
+      ).length,
+      averageRiskScore: logs.reduce((sum, log) => sum + (log.risk_score || 0), 0) / 
+        logs.filter(log => log.risk_score !== null).length || 0,
+      windowSwitchFrequency: logs.filter(log => log.type === 'window_state_change').length / totalDurationMinutes,
+      keystrokeFrequency: logs.filter(log => log.type === 'keyboard_activity').length / totalDurationMinutes,
+      mouseMovementFrequency: logs.filter(log => log.type === 'mouse_activity').length / totalDurationMinutes,
+      focusPercentage: (logs.filter(log => 
+        log.type === 'window_state_change' && log.data?.state === 'focused'
+      ).length / logs.length) * 100
+    };
+
+    // Calculate activity breakdown
+    const activityBreakdown = {
+      mouseEvents: logs.filter(log => log.type === 'mouse_activity').length,
+      keyboardEvents: logs.filter(log => log.type === 'keyboard_activity').length,
+      windowEvents: logs.filter(log => log.type === 'window_state_change').length,
+      otherEvents: logs.filter(log => 
+        !['mouse_activity', 'keyboard_activity', 'window_state_change'].includes(log.type)
+      ).length
+    };
+
     // Fill in activity data and risk scores
     logs.forEach(log => {
       const logDate = new Date(log.created_at);
@@ -72,15 +132,12 @@ export async function GET(
       
       if (point) {
         point.totalActivity++;
-        if (log.type === 'window_state_change' && log.data?.state === 'blurred') {
-          point.suspiciousEvents++;
-        }
-        // Update scores if available
+        // Update all scores, defaulting to previous values if null
         if (log.risk_score !== null) {
           point.riskScore = log.risk_score;
-          point.mouseScore = log.mouse_score;
-          point.keyboardScore = log.keyboard_score;
-          point.windowScore = log.window_score;
+          point.mouseScore = log.mouse_score ?? point.mouseScore;
+          point.keyboardScore = log.keyboard_score ?? point.keyboardScore;
+          point.windowScore = log.window_score ?? point.windowScore;
         }
       }
     });
@@ -107,7 +164,7 @@ export async function GET(
         name: "Student " + userId.slice(0, 4),
         email: `student${userId.slice(0, 4)}@example.com`,
         examStartTime: logs[0].created_at,
-        deviceInfo: `Screen: ${logs[0].screen_width}x${logs[0].screen_height}, Window: ${logs[0].window_width}x${logs[0].window_height}, Type: ${logs[0].device_type || 'Unknown'}`,
+        deviceInfo: `Screen: ${deviceInfo.screenWidth}x${deviceInfo.screenHeight}, Window: ${deviceInfo.windowWidth}x${deviceInfo.windowHeight}, Type: ${deviceInfo.deviceType || 'Unknown'}`,
         userId: userId,
         riskScore,
         riskLevel,
@@ -115,13 +172,18 @@ export async function GET(
         keyboardScore,
         windowScore
       },
+      deviceInfo,
+      screenSizeHistory,
       riskScore,
       riskLevel,
       mouseScore,
       keyboardScore,
       windowScore,
       recentActivities,
-      timeSeriesData
+      timeSeriesData,
+      activityStats,
+      activityBreakdown,
+      riskScoreHistory
     };
 
     const headers = new Headers();

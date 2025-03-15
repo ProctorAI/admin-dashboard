@@ -77,7 +77,11 @@ export async function GET(
           riskScore: null,
           mouseScore: null,
           keyboardScore: null,
-          windowScore: null
+          windowScore: null,
+          mouseMovements: 0,
+          keystrokes: 0,
+          windowSwitches: 0,
+          focusTime: 0
         });
         currentTime = new Date(currentTime.getTime() + 60000);
       }
@@ -90,10 +94,22 @@ export async function GET(
         
         if (point) {
           point.totalActivity++;
-          if (log.type === 'window_state_change' && log.data?.state === 'blurred') {
-            point.suspiciousEvents++;
+          switch (log.type) {
+            case 'mouse_move':
+              point.mouseMovements++;
+              break;
+            case 'key_press':
+              point.keystrokes++;
+              break;
+            case 'window_state_change':
+              point.windowSwitches++;
+              if (log.data?.state === 'blurred') {
+                point.suspiciousEvents++;
+              } else if (log.data?.state === 'focused') {
+                point.focusTime += 60;
+              }
+              break;
           }
-          // Update scores if available
           if (log.risk_score !== null) {
             point.riskScore = log.risk_score;
             point.mouseScore = log.mouse_score;
@@ -103,9 +119,86 @@ export async function GET(
         }
       });
 
-      // Convert time series map to sorted array
-      const timeSeriesData = Array.from(timeSeriesMap.values())
-        .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      // Calculate activity stats
+      const totalTimeInMinutes = (new Date(latestTime).getTime() - new Date(earliestTime).getTime()) / (1000 * 60);
+      const focusedLogs = chronologicalLogs.filter(log => 
+        log.type === 'window_state_change' && log.data?.state === 'focused'
+      );
+      const totalFocusTimeInMinutes = focusedLogs.length; // Each focus log represents roughly a minute of focus time
+      
+      const activityStats = {
+        totalEvents: chronologicalLogs.length,
+        mouseEvents: chronologicalLogs.filter(log => log.type === 'mouse_move').length,
+        keyboardEvents: chronologicalLogs.filter(log => log.type === 'key_press').length,
+        windowEvents: chronologicalLogs.filter(log => log.type === 'window_state_change').length,
+        suspiciousEventCount: chronologicalLogs.filter(log => 
+          log.type === 'window_state_change' && log.data?.state === 'blurred'
+        ).length,
+        averageRiskScore: chronologicalLogs
+          .filter(log => log.risk_score !== null)
+          .reduce((acc, log) => acc + (log.risk_score || 0), 0) / chronologicalLogs.length || 0,
+        windowSwitchFrequency: chronologicalLogs.filter(log => log.type === 'window_state_change').length / totalTimeInMinutes,
+        keystrokeFrequency: chronologicalLogs.filter(log => log.type === 'key_press').length / totalTimeInMinutes,
+        mouseMovementFrequency: chronologicalLogs.filter(log => log.type === 'mouse_move').length / totalTimeInMinutes,
+        suspiciousEventFrequency: chronologicalLogs.filter(log => 
+          log.type === 'window_state_change' && log.data?.state === 'blurred'
+        ).length / totalTimeInMinutes,
+        focusPercentage: (totalFocusTimeInMinutes / totalTimeInMinutes) * 100
+      };
+
+      // Calculate activity breakdown
+      const recentLogs = chronologicalLogs.slice(-100);
+      const previousLogs = chronologicalLogs.slice(-200, -100);
+
+      const calculateEventCount = (logs: typeof chronologicalLogs, type: string) => 
+        logs.filter(log => log.type === type).length;
+
+      const activityBreakdown = {
+        data: {
+          mouseEvents: calculateEventCount(recentLogs, 'mouse_move'),
+          keyboardEvents: calculateEventCount(recentLogs, 'key_press'),
+          windowEvents: calculateEventCount(recentLogs, 'window_state_change'),
+          otherEvents: calculateEventCount(recentLogs, 'tab_switch')
+        },
+        trends: {
+          mouseEvents: ((calculateEventCount(recentLogs, 'mouse_move') - calculateEventCount(previousLogs, 'mouse_move')) / calculateEventCount(previousLogs, 'mouse_move')) * 100,
+          keyboardEvents: ((calculateEventCount(recentLogs, 'key_press') - calculateEventCount(previousLogs, 'key_press')) / calculateEventCount(previousLogs, 'key_press')) * 100,
+          windowEvents: ((calculateEventCount(recentLogs, 'window_state_change') - calculateEventCount(previousLogs, 'window_state_change')) / calculateEventCount(previousLogs, 'window_state_change')) * 100,
+          otherEvents: ((calculateEventCount(recentLogs, 'tab_switch') - calculateEventCount(previousLogs, 'tab_switch')) / calculateEventCount(previousLogs, 'tab_switch')) * 100,
+          overall: ((recentLogs.length - previousLogs.length) / previousLogs.length) * 100
+        }
+      };
+
+      // Extract device info
+      const deviceInfo = {
+        screenWidth: chronologicalLogs[0].screen_width,
+        screenHeight: chronologicalLogs[0].screen_height,
+        windowWidth: chronologicalLogs[0].window_width,
+        windowHeight: chronologicalLogs[0].window_height,
+        deviceType: chronologicalLogs[0].device_type || 'Unknown',
+        userAgent: chronologicalLogs[0].user_agent || 'Unknown'
+      };
+
+      // Calculate risk score history
+      const riskScoreHistory = chronologicalLogs
+        .filter(log => log.risk_score !== null)
+        .map(log => ({
+          timestamp: log.created_at,
+          score: log.risk_score || 0,
+          level: log.risk_level || 'low',
+          mouseScore: log.mouse_score || 0,
+          keyboardScore: log.keyboard_score || 0,
+          windowScore: log.window_score || 0
+        }));
+
+      // Calculate screen size history
+      const screenSizeHistory = chronologicalLogs
+        .filter(log => log.window_width && log.window_height)
+        .map(log => ({
+          timestamp: log.created_at,
+          windowWidth: log.window_width,
+          windowHeight: log.window_height
+        }));
 
       // Get the latest log with risk scores
       const latestLogWithScore = [...chronologicalLogs]
@@ -144,7 +237,12 @@ export async function GET(
         keyboardScore,
         windowScore,
         recentActivities,
-        timeSeriesData
+        timeSeriesData: Array.from(timeSeriesMap.values()),
+        activityStats,
+        riskScoreHistory,
+        activityBreakdown: activityBreakdown.data,
+        deviceInfo,
+        screenSizeHistory
       });
     }
 

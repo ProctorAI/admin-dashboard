@@ -4,8 +4,8 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { Breadcrumbs } from "@/components/navigation/breadcrumbs"
 
 export const metadata: Metadata = {
-  title: "Dashboard - ProctorAI",
-  description: "ProctorAI Dashboard",
+  title: "ProctorAI",
+  description: "ProctorAI",
 }
 
 export default function DashboardLayout({
