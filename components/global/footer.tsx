@@ -16,7 +16,7 @@ const Footer = ({ className }: FooterProps) => {
                     <div className="lg:col-span-2">
                         <div className="flex items-center space-x-2">
                             {/* <Icons.Brain className="h-6 w-6" /> */}
-                            <span className="text-lg font-semibold">ProctorAI</span>
+                            <span className="text-lg font-semibold">NEST</span>
                         </div>
                         <p className="mt-4 text-sm text-muted-foreground">
                             Secure and reliable AI-powered online examination proctoring platform for educational institutions

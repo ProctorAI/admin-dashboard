@@ -3,6 +3,8 @@
 import { Hero } from "@/components/landing/hero"
 import { Features } from "@/components/landing/features"
 import { CTA } from "@/components/landing/cta"
+import { SystemFlow } from "@/components/landing/system-flow"
+import { AdminDashboard } from "@/components/landing/admin-dashboard"
 import { cn } from "@/lib/utils"
 import { GridPattern } from "@/components/magicui/grid-pattern"
 
@@ -31,6 +33,8 @@ export default function LandingPage() {
       {/* Content container */}
       <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <Hero />
+        <SystemFlow />
+        <AdminDashboard />
         <Features />
         <CTA />
       </div>

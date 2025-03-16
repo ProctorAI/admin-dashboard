@@ -84,7 +84,7 @@ export function Header() {
             )}>
               <Link href="/" className="group relative flex items-center gap-3">
                 <Image src="/logos/proctorai-logo.png" alt="ProctorAI logo" width={50} height={50} className="rounded-xl" />
-                <span className="font-medium">ProctorAI</span>
+                <span className="font-medium">NEST</span>
               </Link>
 
               <nav className="relative hidden md:block">

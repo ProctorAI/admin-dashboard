@@ -26,6 +26,10 @@ const routes = {
     name: "Exams",
     path: "/exams",
   },
+  "/tests": {
+    name: "Tests",
+    path: "/tests",
+  },
 }
 
 export function Breadcrumbs({ 

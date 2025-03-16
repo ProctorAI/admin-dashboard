@@ -8,6 +8,7 @@ import {
   Settings,
   Brain,
   Shield,
+  File,
 } from "lucide-react"
 import {
   Sidebar,
@@ -34,7 +35,13 @@ const navigationItems = [
     href: "/exams",
     icon: Shield,
     description: "Monitor ongoing examinations",
-  }
+  },
+  {
+    title: "Tests",
+    href: "/tests",
+    icon: File,
+    description: "Manage your tests",
+  },
 ]
 
 const settingsItems = [
@@ -60,7 +67,7 @@ export function AppSidebar() {
             </div>
             <div className="space-y-1">
               <h1 className="text-lg font-semibold tracking-tight text-foreground">
-                ProctorAI
+                NEST
               </h1>
               <p className="text-[10px] font-medium text-muted-foreground">
                 Intelligent Exam Monitoring

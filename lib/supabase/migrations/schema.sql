@@ -20,6 +20,7 @@ create table tests (
     status text check (status in ('draft', 'published', 'archived')) default 'draft',
     start_date timestamp with time zone,
     end_date timestamp with time zone,
+    created_by uuid references auth.users(id),
     created_at timestamp with time zone default now(),
     updated_at timestamp with time zone default now()
 );

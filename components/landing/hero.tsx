@@ -10,11 +10,9 @@ import { AuroraText } from "@/components/magicui/aurora-text"
 import { AnimatedShinyText } from "@/components/magicui/animated-shiny-text"
 import { cn } from "@/lib/utils"
 
-const auroraColors = ["#38bdf8", "#0070F3", "#2dd4bf", "#7928CA", "#FF0080", "#a855f7"]
-
 export function Hero() {
   return (
-    <section className="py-20 sm:py-24 lg:py-32">
+    <section className="py-20 sm:py-24 lg:py-22">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -23,12 +21,12 @@ export function Hero() {
       >
         <Link
           href="#"
-          className="group rounded-full border border-black/5 bg-neutral-100 text-base text-white transition-all ease-in hover:cursor-pointer hover:bg-neutral-200 dark:border-white/5 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+          className="group rounded-full border border-black/5 bg-gradient-to-r from-blue-50 to-blue-100 px-4 py-1.5 text-sm text-neutral-700 transition-all ease-in hover:cursor-pointer dark:border-white/5 dark:from-neutral-900 dark:to-neutral-800 dark:text-neutral-300"
         >
-        <AnimatedShinyText className="inline-flex items-center justify-center px-4 py-1 transition ease-out hover:text-neutral-600 hover:duration-300 hover:dark:text-neutral-400">
-        <span> ✨Introducing ProctorAI</span>
-            <ArrowRightIcon className="ml-1 size-3 transition-transform duration-300 ease-in-out group-hover:translate-x-0.5" />
-          </AnimatedShinyText>
+          <span className="inline-flex items-center gap-1">
+            🚀 Browser Extension Now Available
+            <ArrowRightIcon className="size-3 transition-transform duration-300 ease-in-out group-hover:translate-x-0.5" />
+          </span>
         </Link>
       </motion.div>
 
@@ -38,45 +36,39 @@ export function Hero() {
         transition={{ duration: 0.5, delay: 0.2 }}
         className="mt-10 text-center"
       >
-        <h1 className="mx-auto max-w-4xl text-4xl font-bold tracking-tight text-foreground sm:text-6xl lg:text-7xl">
-          Secure Online Testing {" "}
-          {/* <AuroraText colors={auroraColors}>Secure Online Testing</AuroraText>{" "} */}
-          <span className="bg-gradient-to-r from-[#38bdf8] via-[#2dd4bf] to-[#0070F3] bg-clip-text text-transparent">Made Simple</span>
+        <h1 className="mx-auto max-w-4xl text-4xl font-bold tracking-tight sm:text-6xl lg:text-6xl">
+          <span className="inline-block bg-gradient-to-r from-[#00C6FF] to-[#0072FF] bg-clip-text text-transparent">
+            NEST
+          </span>
+          <span className="block text-foreground">
+            Non-Invasive Examination{" "}
+            <span className="bg-gradient-to-r from-[#FF0080] via-[#7928CA] to-[#FF0080] bg-clip-text text-transparent">
+              Surveillance Technology
+            </span>
+          </span>
         </h1>
-        <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-muted-foreground sm:mt-8">
-          ProctorAI provides a secure and reliable platform for conducting online examinations with advanced AI-powered proctoring features.
+        <p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-muted-foreground">
+          A simple browser extension that helps monitor online exams while keeping student privacy intact.
         </p>
         
-        <div className="mt-8 flex items-center justify-center gap-4 sm:mt-10">
+        <div className="mt-10 flex items-center justify-center gap-4">
           <ShimmerButton 
-            className="flex items-center gap-2 px-6 py-3 text-base sm:text-lg"
-            background="linear-gradient(to right, #0070F3, #38bdf8)"
+            className="flex items-center gap-2 px-8 py-3.5 text-base font-medium sm:text-lg"
+            background="linear-gradient(to right, #0072FF, #00C6FF)"
           >
-            <span className="whitespace-pre-wrap text-center font-medium leading-none tracking-tight text-white">
-              Get started today
+            <span className="whitespace-pre-wrap text-center leading-none tracking-tight text-white">
+              Install Extension
             </span>
-            <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1 sm:w-5 sm:h-5" />
+            <ArrowRight className="size-4 transition-transform group-hover:translate-x-1 sm:size-5" />
           </ShimmerButton>
-          <div className="block dark:hidden">
-            <ShimmerButton 
-              className="flex items-center gap-2 px-6 py-3 text-base sm:text-lg"
-              background="linear-gradient(to right, #7928CA, #FF0080)"
-            >
-              <span className="whitespace-pre-wrap text-center font-medium leading-none tracking-tight text-white">
-                View features
-              </span>
-            </ShimmerButton>
-          </div>
-          <div className="hidden dark:block">
-            <ShimmerButton 
-              className="flex items-center gap-2 px-6 py-3 text-base sm:text-lg"
-              background="linear-gradient(to right, rgba(255,255,255,0.1), rgba(255,255,255,0.05))"
-            >
-              <span className="whitespace-pre-wrap text-center font-medium leading-none tracking-tight text-white/90">
-                View features
-              </span>
-            </ShimmerButton>
-          </div>
+          <ShimmerButton 
+            className="flex items-center gap-2 px-8 py-3.5 text-base font-medium sm:text-lg"
+            background="linear-gradient(to right, #7928CA, #FF0080)"
+          >
+            <span className="whitespace-pre-wrap text-center leading-none tracking-tight text-white">
+              View Demo
+            </span>
+          </ShimmerButton>
         </div>
       </motion.div>
 
@@ -84,15 +76,16 @@ export function Hero() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.4 }}
-        className="relative mx-auto mt-16 sm:mt-20 lg:mt-24"
+        className="relative mx-auto mt-16 sm:mt-20 lg:mt-14"
       >
         <div className="relative rounded-2xl bg-gradient-to-b from-muted/50 to-muted p-2 ring-1 ring-foreground/10 backdrop-blur-3xl dark:from-muted/30 dark:to-background/80">
           <Image
-            src="/proctorai-dashboard.png"
-            alt="ProctorAI Dashboard"
+            src="/pages/realtime-monitoring.png"
+            alt="NEST Dashboard"
             width={1200}
-            height={800}
+            height={1600}
             quality={100}
+            priority
             className="rounded-xl shadow-2xl ring-1 ring-foreground/10 transition-all duration-300"
           />
           <BorderBeam size={250} duration={12} delay={9} />

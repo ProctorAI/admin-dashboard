@@ -68,7 +68,7 @@ export function Features() {
                 feature.gradient,
                 "ring-1 ring-foreground/10"
               )}>
-                <feature.icon className="h-6 w-6 text-white" />
+                <feature.icon className="h-6 w-6 text-black dark:text-white" />
               </div>
               <h3 className="text-xl font-semibold text-foreground">
                 {feature.title}
