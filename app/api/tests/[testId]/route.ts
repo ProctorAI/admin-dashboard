@@ -4,9 +4,10 @@ import { NextResponse } from "next/server"
 
 export async function GET(
   request: Request,
-  { params }: { params: { testId: string } }
+  { params }: { params: Promise<{ testId: string }> }
 ) {
   try {
+    const { testId } = await params
     const supabase = await createSupabaseServer()
 
 
@@ -20,7 +21,7 @@ export async function GET(
           options:question_options(*)
         )
       `)
-      .eq("id", params.testId)
+      .eq("id", testId)
       .single()
 
     if (error) {
@@ -41,9 +42,10 @@ export async function GET(
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { testId: string } }
+  { params }: { params: Promise<{ testId: string }> }
 ) {
   try {
+    const { testId } = await params
     const supabase = await createSupabaseServer()
 
     const { data: session } = await supabase.auth.getSession()
@@ -67,7 +69,7 @@ export async function PATCH(
     const { data: test, error } = await supabase
       .from("tests")
       .update(updates)
-      .eq("id", params.testId)
+      .eq("id", testId)
       .select()
       .single()
 
@@ -89,9 +91,10 @@ export async function PATCH(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { testId: string } }
+  { params }: { params: Promise<{ testId: string }> }
 ) {
   try {
+    const { testId } = await params
     const supabase = await createSupabaseServer()
 
     const { data: session } = await supabase.auth.getSession()
@@ -114,7 +117,7 @@ export async function DELETE(
     const { error } = await supabase
       .from("tests")
       .delete()
-      .eq("id", params.testId)
+      .eq("id", testId)
 
     if (error) {
       console.error(error)
